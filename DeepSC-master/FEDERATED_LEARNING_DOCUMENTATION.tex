@@ -1,0 +1,812 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{shapes,arrows,positioning}
+
+\geometry{margin=1in}
+
+% Code listing style
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{green!60!black},
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    stepnumber=1,
+    numbersep=5pt,
+    backgroundcolor=\color{gray!10},
+    frame=single,
+    breaklines=true,
+    breakatwhitespace=true,
+    tabsize=4,
+    showspaces=false,
+    showstringspaces=false
+}
+
+% Hyperref setup
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan,
+    pdftitle={Federated Learning Documentation for DeepSC},
+    pdfauthor={DeepSC Team}
+}
+
+\title{Federated Learning Documentation for DeepSC}
+\author{DeepSC Federated Learning Implementation}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+\newpage
+
+\section{Introduction to Federated Learning}
+
+\subsection{What is Federated Learning?}
+
+\textbf{Federated Learning (FL)} is a distributed machine learning approach where multiple clients (devices or parties) collaboratively train a model without sharing their raw data. Instead of sending data to a central server, the training happens locally on each client, and only model updates (weights/parameters) are sent to a central server for aggregation.
+
+\subsection{Why Use Federated Learning?}
+
+\begin{enumerate}
+    \item \textbf{Privacy}: Raw data never leaves the client's device
+    \item \textbf{Efficiency}: Reduces bandwidth by sending only model updates instead of large datasets
+    \item \textbf{Scalability}: Can leverage many distributed devices
+    \item \textbf{Regulatory Compliance}: Helps meet data privacy regulations (GDPR, HIPAA, etc.)
+\end{enumerate}
+
+\subsection{Traditional vs. Federated Learning}
+
+\textbf{Traditional Centralized Learning:}
+
+\begin{verbatim}
+┌─────────┐     ┌─────────┐     ┌─────────┐
+│ Client1 │     │ Client2 │     │ Client3 │
+│  Data   │────▶│  Data   │────▶│  Data   │
+└─────────┘     └─────────┘     └─────────┘
+     │               │               │
+     └───────────────┼───────────────┘
+                     ▼
+              ┌─────────────┐
+              │   Server    │
+              │ (All Data)  │
+              │   Train     │
+              └─────────────┘
+\end{verbatim}
+
+\textbf{Federated Learning:}
+
+\begin{verbatim}
+┌─────────┐     ┌─────────┐     ┌─────────┐
+│ Client1 │     │ Client2 │     │ Client3 │
+│  Data   │     │  Data   │     │  Data   │
+│ Train   │     │ Train   │     │ Train   │
+└────┬────┘     └────┬────┘     └────┬────┘
+     │               │               │
+     │ Model Updates │ Model Updates │ Model Updates
+     └───────────────┼───────────────┘
+                     ▼
+              ┌─────────────┐
+              │   Server    │
+              │ Aggregate   │
+              │   Updates   │
+              └──────┬──────┘
+                     │
+              Global Model
+\end{verbatim}
+
+\subsection{Key Federated Learning Concepts}
+
+\begin{enumerate}
+    \item \textbf{Server}: Central coordinator that aggregates model updates
+    \item \textbf{Clients}: Distributed devices/parties that hold local data
+    \item \textbf{Global Model}: The shared model maintained by the server
+    \item \textbf{Local Training}: Each client trains on its own data
+    \item \textbf{Aggregation}: Server combines updates from multiple clients (typically using FedAvg)
+    \item \textbf{Round}: One iteration of: select clients $\rightarrow$ local training $\rightarrow$ aggregation
+\end{enumerate}
+
+\section{Overview of DeepSC}
+
+\subsection{What is DeepSC?}
+
+\textbf{DeepSC (Deep learning enabled Semantic Communication Systems)} is a neural network architecture designed for semantic communication over noisy wireless channels. Unlike traditional communication systems that transmit bits, DeepSC transmits semantic meaning, making communication more efficient and robust.
+
+\subsection{DeepSC Architecture Flow}
+
+\begin{verbatim}
+Input Sentence (text)
+    │
+    ▼
+┌─────────────────┐
+│ Semantic Encoder│  ← Transformer encoder (extracts meaning)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Channel Encoder │  ← Prepares for transmission
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Noisy Channel  │  ← AWGN, Rayleigh, or Rician fading
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Channel Decoder │  ← Recovers from noise
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Semantic Decoder│  ← Transformer decoder (reconstructs sentence)
+└────────┬────────┘
+         │
+         ▼
+Output Sentence (reconstructed text)
+\end{verbatim}
+
+\subsection{Why Federated Learning for DeepSC?}
+
+\begin{itemize}
+    \item \textbf{Distributed Data}: Different clients may have different text data (different languages, domains, etc.)
+    \item \textbf{Privacy}: Text data may contain sensitive information
+    \item \textbf{Robustness}: Training on diverse distributed data improves generalization
+    \item \textbf{Efficiency}: Clients can train locally without uploading large text datasets
+\end{itemize}
+
+\section{Federated Learning Workflow}
+
+\subsection{High-Level Workflow}
+
+The federated learning process follows these steps:
+
+\begin{verbatim}
+1. INITIALIZATION
+   ├── Load vocabulary and datasets
+   ├── Partition data across clients
+   ├── Initialize global DeepSC model
+   └── Create data loaders for each client
+
+2. FEDERATED TRAINING LOOP (for each round)
+   │
+   ├── STEP 1: Client Selection
+   │   └── Server randomly selects subset of clients
+   │
+   ├── STEP 2: Local Training (for each selected client)
+   │   ├── Copy global model to client
+   │   ├── Train on local data for E epochs
+   │   ├── Sample channel noise for each epoch
+   │   └── Return updated model weights
+   │
+   ├── STEP 3: Aggregation
+   │   ├── Server receives model updates from clients
+   │   ├── Compute weighted average (FedAvg)
+   │   └── Update global model
+   │
+   └── STEP 4: Checkpointing (optional)
+       └── Save model periodically
+
+3. FINALIZATION
+   └── Save final global model
+\end{verbatim}
+
+\subsection{Detailed Round-by-Round Process}
+
+\textbf{Round 1:}
+\begin{verbatim}
+Server: Initialize global model with random weights
+        └── Global Model: W₀ (random initialization)
+
+Server: Select clients [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+Client 0: Receive W₀ → Train on local data → Return W₀¹
+Client 1: Receive W₀ → Train on local data → Return W₁¹
+Client 2: Receive W₀ → Train on local data → Return W₂¹
+...
+Client 9: Receive W₀ → Train on local data → Return W₉¹
+
+Server: Aggregate: W₁ = FedAvg(W₀¹, W₁¹, ..., W₉¹)
+\end{verbatim}
+
+\textbf{Round 2:}
+\begin{verbatim}
+Server: Select clients [2, 5, 7, 10, 12, 15, 18, 19, 3, 8]
+
+Client 2: Receive W₁ → Train on local data → Return W₂²
+Client 5: Receive W₁ → Train on local data → Return W₅²
+...
+Client 8: Receive W₁ → Train on local data → Return W₈²
+
+Server: Aggregate: W₂ = FedAvg(W₂², W₅², ..., W₈²)
+\end{verbatim}
+
+This continues for \texttt{--rounds} iterations.
+
+\section{Code Structure and Components}
+
+\subsection{File Organization}
+
+\begin{verbatim}
+DeepSC-master/
+├── fl_train.py          # Main federated training script
+├── fl_data.py           # Dataset loading utilities
+├── fl_partition.py      # Data partitioning strategies
+├── fl_eval.py           # Evaluation functions (BLEU score)
+├── utils.py             # Training utilities, channel simulation
+├── models/
+│   ├── transceiver.py   # DeepSC model architecture
+│   └── mutual_info.py   # Mutual information estimation
+└── data/
+    └── europarl/
+        ├── train_data.pkl
+        ├── test_data.pkl
+        └── vocab.json
+\end{verbatim}
+
+\subsection{Component Responsibilities}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{File} & \textbf{Purpose} \\
+\midrule
+\texttt{fl\_train.py} & Orchestrates federated learning: client selection, local training, aggregation \\
+\texttt{fl\_data.py} & Loads preprocessed Europarl datasets (train/test splits) \\
+\texttt{fl\_partition.py} & Splits training data across clients (IID or non-IID) \\
+\texttt{fl\_eval.py} & Evaluates model using BLEU score on test set \\
+\texttt{utils.py} & Training step, channel simulation (AWGN/Rayleigh/Rician), loss functions \\
+\texttt{models/transceiver.py} & DeepSC neural network architecture (encoder-decoder) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Detailed Code Walkthrough}
+
+\subsection{Initialization Phase (\texttt{fl\_train.py} lines 167-244)}
+
+\subsubsection{Load Vocabulary (lines 167-190)}
+
+\begin{lstlisting}
+vocab = json.load(open(vocab_path, "r", encoding="utf-8"))
+token_to_idx = vocab["token_to_idx"]
+idx_to_token = {int(idx): token for token, idx in token_to_idx.items()}
+\end{lstlisting}
+
+\textbf{What happens:}
+\begin{itemize}
+    \item Loads vocabulary mapping: \texttt{\{"hello": 42, "world": 17, ...\}}
+    \item Creates reverse mapping: \texttt{\{42: "hello", 17: "world", ...\}}
+    \item Extracts special token indices: \texttt{<PAD>}, \texttt{<START>}, \texttt{<END>}
+\end{itemize}
+
+\textbf{Why:} The model works with token IDs (integers), not words. Vocabulary converts between text and IDs.
+
+\subsubsection{Load Datasets (lines 192-199)}
+
+\begin{lstlisting}
+train_set = EurDatasetLocal(args.data_root, split="train")
+test_set = EurDatasetLocal(args.data_root, split="test")
+\end{lstlisting}
+
+\textbf{What happens:}
+\begin{itemize}
+    \item \texttt{EurDatasetLocal} loads \texttt{train\_data.pkl} and \texttt{test\_data.pkl}
+    \item Each sample is a list of token IDs: \texttt{[1, 42, 17, 2]} (START, hello, world, END)
+\end{itemize}
+
+\textbf{Code in \texttt{fl\_data.py}:}
+\begin{lstlisting}
+class EurDatasetLocal(Dataset):
+    def __getitem__(self, index):
+        return self.data[index]  # Returns list[int] token IDs
+\end{lstlisting}
+
+\subsubsection{Partition Data Across Clients (lines 201-227)}
+
+\textbf{IID Partitioning (\texttt{partition\_iid}):}
+\begin{lstlisting}
+def partition_iid(num_samples, num_clients, seed=0):
+    idx = np.arange(num_samples)  # [0, 1, 2, ..., N-1]
+    rng.shuffle(idx)              # Random shuffle
+    splits = np.array_split(idx, num_clients)  # Split into N equal parts
+    return [s.tolist() for s in splits]
+\end{lstlisting}
+
+\textbf{Example with 1000 samples, 4 clients:}
+\begin{itemize}
+    \item Client 0: samples [245, 892, 103, ...] (random 250 samples)
+    \item Client 1: samples [67, 334, 901, ...] (random 250 samples)
+    \item Client 2: samples [512, 23, 789, ...] (random 250 samples)
+    \item Client 3: samples [156, 445, 678, ...] (random 250 samples)
+\end{itemize}
+
+\textbf{Non-IID Partitioning (\texttt{partition\_by\_length\_mild}):}
+\begin{lstlisting}
+def partition_by_length_mild(dataset, num_clients, seed=0):
+    lengths = np.array([len(dataset[i]) for i in range(len(dataset))])
+    idx = np.argsort(lengths)  # Sort by sentence length
+    
+    # Interleave: client 0 gets idx[0], client 1 gets idx[1], ...
+    client_lists = [[] for _ in range(num_clients)]
+    for j, i in enumerate(idx):
+        client_lists[j % num_clients].append(int(i))
+    return client_lists
+\end{lstlisting}
+
+\textbf{Example:}
+\begin{itemize}
+    \item Short sentences $\rightarrow$ Client 0, Client 1, Client 2, Client 3, Client 0, ...
+    \item Medium sentences $\rightarrow$ Client 1, Client 2, Client 3, Client 0, Client 1, ...
+    \item Long sentences $\rightarrow$ Client 2, Client 3, Client 0, Client 1, Client 2, ...
+\end{itemize}
+
+\textbf{Why non-IID?} Real-world federated scenarios often have data heterogeneity (different clients have different data distributions).
+
+\textbf{Create DataLoaders:}
+\begin{lstlisting}
+for cid in range(args.num_clients):
+    subset = Subset(train_set, client_indices[cid])
+    loader = DataLoader(subset, batch_size=args.batch_size, shuffle=True, ...)
+    client_loaders.append(loader)
+\end{lstlisting}
+
+Each client gets its own DataLoader that provides batches of its local data.
+
+\subsubsection{Initialize Global Model (lines 229-242)}
+
+\begin{lstlisting}
+global_model = DeepSC(
+    args.num_layers,      # 4 transformer layers
+    num_vocab, num_vocab, num_vocab, num_vocab,  # vocab sizes
+    args.d_model,         # 128-dimensional embeddings
+    args.num_heads,       # 8 attention heads
+    args.dff,             # 512 feedforward dimension
+    args.dropout          # 0.1 dropout rate
+).to(device)
+
+initNetParams(global_model)  # Xavier initialization
+\end{lstlisting}
+
+\textbf{What happens:}
+\begin{itemize}
+    \item Creates DeepSC model with random weights
+    \item All clients will start from this same global model in round 1
+\end{itemize}
+
+\subsection{Federated Training Loop (\texttt{fl\_train.py} lines 246-288)}
+
+\subsubsection{Client Selection (lines 255-260)}
+
+\begin{lstlisting}
+selected = np.random.choice(
+    args.num_clients,                    # Total clients: 20
+    size=min(args.clients_per_round, args.num_clients),  # Select 10
+    replace=False                         # Without replacement
+)
+\end{lstlisting}
+
+\textbf{Example:} From 20 clients, randomly select 10: \texttt{[0, 3, 7, 12, 15, 2, 9, 18, 5, 11]}
+
+\textbf{Why not all clients?}
+\begin{itemize}
+    \item Reduces communication overhead
+    \item Faster rounds
+    \item Still provides good model updates
+\end{itemize}
+
+\subsubsection{Local Training (\texttt{client\_update} function, lines 57-118)}
+
+\textbf{Step-by-step for one client:}
+
+\textbf{A. Copy Global Model:}
+\begin{lstlisting}
+model = copy.deepcopy(global_model).to(device)
+\end{lstlisting}
+Each client gets an independent copy to avoid modifying the global model.
+
+\textbf{B. Create Local Optimizer:}
+\begin{lstlisting}
+optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, ...)
+\end{lstlisting}
+Each client has its own optimizer state.
+
+\textbf{C. Local Epochs Loop:}
+\begin{lstlisting}
+for local_ep in range(args.local_epochs):  # Default: 1 epoch
+    # Sample channel noise for this epoch
+    n_var = np.random.uniform(
+        SNR_to_noise(args.snr_train_low),   # Convert SNR 5dB to noise variance
+        SNR_to_noise(args.snr_train_high),  # Convert SNR 10dB to noise variance
+    )
+    
+    # Train on batches
+    for batch_idx, sents in enumerate(client_loader):
+        loss = train_step(model, src=sents, trg=sents, n_var=n_var, ...)
+        # Backpropagation updates model weights
+\end{lstlisting}
+
+\textbf{What \texttt{train\_step} does (\texttt{utils.py} lines 252-301):}
+
+\begin{enumerate}
+    \item \textbf{Forward Pass:}
+    \begin{verbatim}
+    Input tokens → Encoder → Channel Encoder → Noisy Channel → 
+    Channel Decoder → Decoder → Output predictions
+    \end{verbatim}
+    
+    \item \textbf{Channel Simulation:}
+    \begin{lstlisting}
+    if channel == 'AWGN':
+        Rx_sig = channels.AWGN(Tx_sig, n_var)  # Add Gaussian noise
+    elif channel == 'Rayleigh':
+        Rx_sig = channels.Rayleigh(Tx_sig, n_var)  # Fading + noise
+    \end{lstlisting}
+    
+    \item \textbf{Loss Computation:}
+    \begin{lstlisting}
+    loss = CrossEntropyLoss(predictions, target_tokens)
+    loss.backward()  # Compute gradients
+    optimizer.step()  # Update weights
+    \end{lstlisting}
+\end{enumerate}
+
+\textbf{D. Return Updated Weights:}
+\begin{lstlisting}
+return model.state_dict()  # Dictionary of all model parameters
+\end{lstlisting}
+
+\textbf{Example state\_dict:}
+\begin{lstlisting}
+{
+    'encoder.embedding.weight': tensor([[...], [...], ...]),
+    'encoder.enc_layers.0.mha.wq.weight': tensor([[...], ...]),
+    'channel_encoder.0.weight': tensor([[...], ...]),
+    ...
+}
+\end{lstlisting}
+
+\subsubsection{Aggregation (\texttt{fedavg} function, lines 41-54)}
+
+\textbf{FedAvg (Federated Averaging) Algorithm:}
+
+\begin{lstlisting}
+def fedavg(global_model, client_states, client_sizes):
+    total = sum(client_sizes)  # Total samples across selected clients
+    
+    for param_name in global_model.state_dict().keys():
+        # Weighted average: larger datasets have more influence
+        new_param = sum(
+            client_states[i][param_name] * (client_sizes[i] / total)
+            for i in range(len(client_states))
+        )
+        global_model.state_dict()[param_name] = new_param
+\end{lstlisting}
+
+\textbf{Mathematical Formula:}
+\begin{equation}
+W_{\text{global}} = \sum_{i} \frac{n_i}{N} \cdot W_i
+\end{equation}
+
+Where:
+\begin{itemize}
+    \item $W_{\text{global}}$: New global model weights
+    \item $W_i$: Weights from client $i$
+    \item $n_i$: Number of samples at client $i$
+    \item $N$: Total samples across all selected clients ($\sum n_i$)
+\end{itemize}
+
+\textbf{Example:}
+\begin{itemize}
+    \item Client 0: 100 samples, weights $W_0$
+    \item Client 1: 200 samples, weights $W_1$
+    \item Client 2: 150 samples, weights $W_2$
+    \item Total: 450 samples
+\end{itemize}
+
+\begin{equation}
+W_{\text{global}} = \frac{100}{450} \cdot W_0 + \frac{200}{450} \cdot W_1 + \frac{150}{450} \cdot W_2
+\end{equation}
+
+\textbf{Why weighted?} Clients with more data contribute more to the global model.
+
+\subsubsection{Checkpointing (lines 282-288)}
+
+\begin{lstlisting}
+if r % args.save_every == 0:  # Every 10 rounds
+    torch.save(global_model.state_dict(), f"fed_deepsc_Rayleigh_round010.pth")
+\end{lstlisting}
+
+Saves model weights periodically for:
+\begin{itemize}
+    \item Resuming training
+    \item Evaluation
+    \item Analysis
+\end{itemize}
+
+\subsection{DeepSC Model Architecture (\texttt{models/transceiver.py})}
+
+\subsubsection{Encoder (lines 185-206)}
+
+\begin{lstlisting}
+class Encoder(nn.Module):
+    def __init__(self, num_layers, src_vocab_size, max_len, d_model, ...):
+        self.embedding = nn.Embedding(src_vocab_size, d_model)  # Word → Vector
+        self.pos_encoding = PositionalEncoding(...)  # Add position info
+        self.enc_layers = nn.ModuleList([EncoderLayer(...) for _ in range(num_layers)])
+\end{lstlisting}
+
+\textbf{Forward Pass:}
+\begin{enumerate}
+    \item \textbf{Embedding:} \texttt{[1, 42, 17, 2]} $\rightarrow$ \texttt{[[0.1, 0.3, ...], [0.5, 0.2, ...], ...]} (128-dim vectors)
+    \item \textbf{Positional Encoding:} Add position information
+    \item \textbf{Transformer Layers:} Self-attention + feedforward (4 layers)
+\end{enumerate}
+
+\textbf{What self-attention does:} Each word attends to all words in the sentence to understand context.
+
+\subsubsection{Channel Encoder (lines 270-273)}
+
+\begin{lstlisting}
+self.channel_encoder = nn.Sequential(
+    nn.Linear(d_model, 256),    # 128 → 256
+    nn.ReLU(),
+    nn.Linear(256, 16)          # 256 → 16 (compressed for transmission)
+)
+\end{lstlisting}
+
+\textbf{Purpose:} Compresses semantic representation for efficient transmission over noisy channel.
+
+\subsubsection{Channel Simulation (\texttt{utils.py} lines 169-200)}
+
+\textbf{AWGN Channel:}
+\begin{lstlisting}
+def AWGN(self, Tx_sig, n_var):
+    noise = torch.normal(0, n_var, size=Tx_sig.shape)
+    Rx_sig = Tx_sig + noise
+    return Rx_sig
+\end{lstlisting}
+Simply adds Gaussian noise.
+
+\textbf{Rayleigh Channel:}
+\begin{lstlisting}
+def Rayleigh(self, Tx_sig, n_var):
+    # Simulate fading (signal strength varies)
+    H = create_fading_matrix()  # Random complex channel matrix
+    Tx_sig = Tx_sig @ H         # Apply fading
+    Rx_sig = AWGN(Tx_sig, n_var)  # Add noise
+    Rx_sig = Rx_sig @ inv(H)    # Channel estimation (try to undo fading)
+    return Rx_sig
+\end{lstlisting}
+Models wireless fading (signal strength fluctuates).
+
+\subsubsection{Channel Decoder (lines 232-252)}
+
+\begin{lstlisting}
+class ChannelDecoder(nn.Module):
+    def forward(self, x):
+        x1 = self.linear1(x)      # 16 → d_model
+        x2 = F.relu(x1)
+        x3 = self.linear2(x2)     # d_model → 512
+        x4 = F.relu(x3)
+        x5 = self.linear3(x4)     # 512 → d_model
+        output = layernorm(x1 + x5)  # Residual connection
+        return output
+\end{lstlisting}
+
+\textbf{Purpose:} Recovers semantic representation from noisy received signal.
+
+\subsubsection{Decoder (lines 210-229)}
+
+Similar to encoder but with:
+\begin{itemize}
+    \item \textbf{Self-attention:} Attends to previously generated words
+    \item \textbf{Cross-attention:} Attends to encoder output (semantic representation)
+    \item \textbf{Feedforward:} Processes information
+\end{itemize}
+
+\textbf{Purpose:} Reconstructs sentence from semantic representation.
+
+\section{Key Concepts Explained}
+
+\subsection{Why Copy the Global Model?}
+
+\begin{lstlisting}
+model = copy.deepcopy(global_model)
+\end{lstlisting}
+
+\textbf{Reason:} If we used \texttt{model = global\_model}, all clients would share the same object. When one client updates weights, it would affect others. Deep copy ensures each client has an independent model.
+
+\subsection{Why Sample Channel Noise Per Epoch?}
+
+\begin{lstlisting}
+for local_ep in range(args.local_epochs):
+    n_var = np.random.uniform(...)  # New noise for each epoch
+\end{lstlisting}
+
+\textbf{Reason:} DeepSC needs to be robust to various noise levels. Sampling different noise each epoch improves generalization.
+
+\subsection{IID vs. Non-IID Partitioning}
+
+\textbf{IID (Independent and Identically Distributed):}
+\begin{itemize}
+    \item Each client has similar data distribution
+    \item Easier to train, converges faster
+    \item Unrealistic in practice
+\end{itemize}
+
+\textbf{Non-IID:}
+\begin{itemize}
+    \item Clients have different data distributions
+    \item More realistic (e.g., different users have different writing styles)
+    \item Harder to train, may need more rounds
+\end{itemize}
+
+\subsection{FedAvg vs. Simple Average}
+
+\textbf{Simple Average:}
+\begin{equation}
+W = \frac{W_1 + W_2 + W_3}{3}
+\end{equation}
+
+\textbf{FedAvg (Weighted Average):}
+\begin{equation}
+W = \frac{n_1}{N} \cdot W_1 + \frac{n_2}{N} \cdot W_2 + \frac{n_3}{N} \cdot W_3
+\end{equation}
+
+\textbf{Why FedAvg?} Clients with more data should have more influence on the global model.
+
+\subsection{Client Selection Strategy}
+
+\textbf{Current Implementation:} Random selection
+\begin{lstlisting}
+selected = np.random.choice(num_clients, size=clients_per_round, replace=False)
+\end{lstlisting}
+
+\textbf{Alternatives (not implemented):}
+\begin{itemize}
+    \item \textbf{Round-robin:} Select clients in order
+    \item \textbf{Stratified:} Ensure diverse client selection
+    \item \textbf{Quality-based:} Select clients with better data quality
+\end{itemize}
+
+\subsection{Local Epochs vs. Global Rounds}
+
+\begin{itemize}
+    \item \textbf{Local Epochs (\texttt{--local\_epochs}):} How many times each client trains on its local data per round
+    \item \textbf{Global Rounds (\texttt{--rounds}):} How many federated learning rounds to perform
+\end{itemize}
+
+\textbf{Trade-off:}
+\begin{itemize}
+    \item More local epochs $\rightarrow$ Better local optimization, but slower rounds
+    \item More rounds $\rightarrow$ Better global model, but more communication
+\end{itemize}
+
+\section{Running the Code}
+
+\subsection{Basic Command}
+
+\begin{lstlisting}[language=bash]
+python fl_train.py --data_root data
+\end{lstlisting}
+
+\subsection{Key Parameters}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Parameter} & \textbf{Default} & \textbf{Description} \\
+\midrule
+\texttt{--data\_root} & \textbf{(required)} & Path to folder containing \texttt{europarl/} \\
+\texttt{--rounds} & 50 & Number of federated learning rounds \\
+\texttt{--num\_clients} & 20 & Total number of clients \\
+\texttt{--clients\_per\_round} & 10 & Clients selected per round \\
+\texttt{--local\_epochs} & 1 & Local training epochs per client \\
+\texttt{--batch\_size} & 128 & Batch size for training \\
+\texttt{--lr} & 1e-4 & Learning rate \\
+\texttt{--channel} & Rayleigh & Channel type: AWGN, Rayleigh, Rician \\
+\texttt{--partition} & iid & Data partition: iid, length\_mild \\
+\texttt{--save\_dir} & checkpoints\_fed & Directory to save checkpoints \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Example Commands}
+
+\textbf{Quick test (few rounds, small model):}
+\begin{lstlisting}[language=bash]
+python fl_train.py --data_root data --rounds 5 --num_clients 5 --clients_per_round 3
+\end{lstlisting}
+
+\textbf{Full training:}
+\begin{lstlisting}[language=bash]
+python fl_train.py --data_root data --rounds 100 --num_clients 20 --clients_per_round 10 --batch_size 128 --lr 1e-4
+\end{lstlisting}
+
+\textbf{Non-IID experiment:}
+\begin{lstlisting}[language=bash]
+python fl_train.py --data_root data --partition length_mild --rounds 50
+\end{lstlisting}
+
+\textbf{Different channel:}
+\begin{lstlisting}[language=bash]
+python fl_train.py --data_root data --channel AWGN --rounds 50
+\end{lstlisting}
+
+\subsection{Output Files}
+
+\begin{itemize}
+    \item \texttt{checkpoints\_fed/fed\_deepsc\_Rayleigh\_round010.pth} - Checkpoint every 10 rounds
+    \item \texttt{checkpoints\_fed/fed\_deepsc\_Rayleigh\_final.pth} - Final model
+\end{itemize}
+
+\subsection{Monitoring Training}
+
+The script prints:
+\begin{itemize}
+    \item \texttt{[Setup]} - Initialization information
+    \item \texttt{[Server] Federated Round X/Y} - Round progress
+    \item \texttt{[Server] Selected clients: [...]} - Which clients are training
+    \item \texttt{[Client] Local training started} - Client training progress
+    \item \texttt{batch X/Y | loss=...} - Training loss per batch
+    \item \texttt{[Server] Aggregating client models} - Aggregation step
+    \item \texttt{[Server] Checkpoint saved} - Model saved
+\end{itemize}
+
+\section{Summary}
+
+This codebase implements \textbf{Federated Learning for DeepSC}, a semantic communication system. The workflow:
+
+\begin{enumerate}
+    \item \textbf{Initialize:} Load data, partition across clients, create global model
+    \item \textbf{For each round:}
+    \begin{itemize}
+        \item Select subset of clients
+        \item Each client trains locally on its data
+        \item Server aggregates updates using FedAvg
+        \item Save checkpoint periodically
+    \end{itemize}
+    \item \textbf{Finalize:} Save final global model
+\end{enumerate}
+
+\textbf{Key Innovation:} Combines federated learning (privacy-preserving distributed training) with semantic communication (efficient, robust text transmission over noisy channels).
+
+\textbf{Benefits:}
+\begin{itemize}
+    \item Privacy: Text data stays on clients
+    \item Efficiency: Only model updates are communicated
+    \item Robustness: Model learns from diverse distributed data
+    \item Realism: Handles non-IID data distributions
+\end{itemize}
+
+\section{Further Reading}
+
+\begin{itemize}
+    \item \textbf{FedAvg Paper:} ``Communication-Efficient Learning of Deep Networks from Decentralized Data'' (McMahan et al., 2017)
+    \item \textbf{DeepSC Paper:} ``Deep Learning Enabled Semantic Communication Systems'' (Xie et al., 2021)
+    \item \textbf{Federated Learning Survey:} ``Federated Learning: Challenges, Methods, and Future Directions'' (Li et al., 2020)
+\end{itemize}
+
+\vspace{1cm}
+\noindent\textit{Documentation generated for DeepSC Federated Learning implementation}
+
+\end{document}
